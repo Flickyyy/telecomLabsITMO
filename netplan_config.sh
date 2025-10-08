@@ -4,6 +4,17 @@
 
 FILE="/etc/netplan/lab-netcfg.yaml"
 
+# определяем, каким демоном управляется сеть
+detect_renderer() {
+  if systemctl list-unit-files --type=service 2>/dev/null | grep -q '^NetworkManager\.service'; then
+    echo "NetworkManager"
+  elif systemctl list-unit-files --type=service 2>/dev/null | grep -q '^systemd-networkd\.service'; then
+    echo "networkd"
+  else
+    echo "networkd"
+  fi
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Запустите скрипт с sudo"
   exit 1
@@ -26,11 +37,12 @@ EOT
 case "$1" in
   write)
     iface=${2:-enp0s3}
+    renderer=$(detect_renderer)
     cat > "$FILE" <<CFG
 # Создано для лабораторной работы №1
 network:
   version: 2
-  renderer: networkd
+  renderer: $renderer
   ethernets:
     $iface:
       addresses:
@@ -42,7 +54,12 @@ network:
       nameservers:
         addresses: [8.8.8.8]
 CFG
-    echo "Файл записан: $FILE"
+    chmod 600 "$FILE"
+    if [ "$renderer" = "networkd" ]; then
+      systemctl enable --now systemd-networkd.service >/dev/null 2>&1 || \
+        echo "Предупреждение: systemd-networkd не удалось запустить автоматически"
+    fi
+    echo "Файл записан: $FILE (renderer: $renderer)"
     ;;
   apply)
     netplan apply
