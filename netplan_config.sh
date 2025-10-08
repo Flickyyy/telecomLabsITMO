@@ -34,10 +34,23 @@ usage() {
 EOT
 }
 
+backup_existing_configs() {
+  shopt -s nullglob
+  for cfg in /etc/netplan/*.yaml /etc/netplan/*.yml; do
+    [ "$cfg" = "$FILE" ] && continue
+    if [ -e "$cfg" ]; then
+      mv "$cfg" "$cfg.bak-lab" 2>/dev/null && \
+        echo "Старый файл перемещён: $cfg -> $cfg.bak-lab"
+    fi
+  done
+  shopt -u nullglob
+}
+
 case "$1" in
   write)
     iface=${2:-enp0s3}
     renderer=$(detect_renderer)
+    backup_existing_configs
     cat > "$FILE" <<CFG
 # Создано для лабораторной работы №1
 network:
@@ -62,7 +75,15 @@ CFG
     echo "Файл записан: $FILE (renderer: $renderer)"
     ;;
   apply)
+    renderer=$(detect_renderer)
     netplan apply
+    if [ "$renderer" = "networkd" ]; then
+      systemctl restart systemd-networkd.service >/dev/null 2>&1 || \
+        echo "Предупреждение: не удалось перезапустить systemd-networkd"
+    elif [ "$renderer" = "NetworkManager" ]; then
+      systemctl restart NetworkManager.service >/dev/null 2>&1 || \
+        echo "Предупреждение: не удалось перезапустить NetworkManager"
+    fi
     ;;
   show)
     cat "$FILE"
