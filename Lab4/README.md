@@ -54,9 +54,9 @@
 ## 4. VLAN и IP-план
 | VLAN | Имя | Назначение | Подсеть | Шлюз | DHCP | Особенности |
 | --- | --- | --- | --- | --- | --- | --- |
-| 10 | USERS | ПК центрального офиса + Wi-Fi клиенты | 10.10.0.0/24 | 10.10.0.1 | DHCP | SSID для Wi-Fi, доступ к ресурсам офиса |
-| 20 | REMOTE | ПК и принтеры дополнительного офиса | 10.20.0.0/24 | 10.20.0.1 | DHCP | Трафик идёт через оптику |
-| 30 | CAMERAS | IP-камеры во всех помещениях | 10.30.0.0/24 | 10.30.0.1 | DHCP | Изолировать от пользовательского трафика |
+| 10 | USERS | ПК центрального офиса + Wi-Fi клиенты | 10.10.0.0/24 | 10.10.0.1 | DHCP (10.10.0.10–10.10.0.250) | SSID для Wi-Fi, доступ к ресурсам офиса |
+| 20 | REMOTE | ПК и принтеры дополнительного офиса | 10.20.0.0/24 | 10.20.0.1 | DHCP (10.20.0.10–10.20.0.250) | Трафик идёт через оптику |
+| 30 | CAMERAS | IP-камеры во всех помещениях | 10.30.0.0/24 | 10.30.0.1 | DHCP (10.30.0.10–10.30.0.150) | Изолировать от пользовательского трафика |
 | 40 | SERVER | Серверная сеть | 10.40.0.0/24 | 10.40.0.254 | статический IP (сервер) | Под сервер, можно оставить DHCP pool для будущих сервисов |
 | 999 | MGMT | Управление (native VLAN) | 192.168.9.0/24 (опционально) | — | — | Отделить служебный трафик, не обязательно выдавать IP |
 
@@ -68,29 +68,28 @@
 | --- | --- | --- |
 | Fa0/1–Fa0/18 | Рабочие станции центрального офиса | 10 |
 | Fa0/19 | Принтер центрального офиса | 10 |
-| Fa0/20–Fa0/22 | Резерв под ПК | 10 |
-| Fa0/23 | IP-камера центрального офиса | 30 |
-| Fa0/24 | Транк к SW-CORE | trunk (10,30,40), native 999 |
+| Fa0/20 | IP-камера центрального офиса | 30 |
+| Fa0/21 | Транк к SW-CORE | trunk (10,30,40), native 999 |
+| Fa0/22–Fa0/24 | Резерв | shutdown |
 
 ### SW-CORE (3560-24PS)
 | Порт | Назначение | VLAN/Режим |
 | --- | --- | --- |
-| Fa0/1 | Транк к SW-CENTRAL | trunk (10,30,40), native 999 |
-| Fa0/2 | Транк к SW-REMOTE | trunk (10,20,30,40), native 999 |
-| Fa0/3 | Сервер DHCP | access 40 |
+| Fa0/1 | Сервер DHCP | access 40 |
+| Fa0/2 | Транк к SW-CENTRAL | trunk (10,30,40), native 999 |
+| Fa0/3 | Транк к SW-REMOTE | trunk (10,20,30,40), native 999 |
 | Fa0/4 | Камера аппаратной | access 30 |
 | Остальные | Резерв под расширение | shutdown |
 
 ### SW-REMOTE (2960-24TT)
 | Порт | Назначение | VLAN |
 | --- | --- | --- |
-| Fa0/1–Fa0/4 | ПК доп. офиса | 20 |
-| Fa0/5 | Принтер доп. офиса | 20 |
-| Fa0/6–Fa0/9 | Резерв | 20 |
-| Fa0/10 | Точка доступа (транк) | trunk (10,20,30), native 999 |
-| Fa0/11–Fa0/22 | Резерв | 20 |
-| Fa0/23 | Камера доп. офиса | 30 |
-| Fa0/24 | Транк на SW-CORE | trunk (10,20,30,40), native 999 |
+| Fa0/1 | Транк на SW-CORE | trunk (10,20,30,40), native 999 |
+| Fa0/2–Fa0/5 | Рабочие станции доп. офиса | 20 |
+| Fa0/6 | Камера доп. офиса | 30 |
+| Fa0/7 | Точка доступа (транк) | trunk (10,20,30), native 999 |
+| Fa0/8 | Принтер доп. офиса | 20 |
+| Fa0/9–Fa0/24 | Резерв | shutdown |
 
 ## 6. Настройка коммутаторов (CLI-скрипты)
 
@@ -114,14 +113,22 @@ vlan 999
  name MGMT_NATIVE
 exit
 
-interface range fa0/1 - 19
+interface range fa0/1 - 18
  switchport mode access
  switchport access vlan 10
  spanning-tree portfast
  no shutdown
 exit
 
-interface fa0/23
+interface fa0/19
+ description CENTRAL-PRINTER
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface fa0/20
  description CAM-CENTRAL
  switchport mode access
  switchport access vlan 30
@@ -129,7 +136,7 @@ interface fa0/23
  no shutdown
 exit
 
-interface fa0/24
+interface fa0/21
  description TRK-TO-SW-CORE
  switchport trunk encapsulation dot1q
  switchport mode trunk
@@ -138,7 +145,7 @@ interface fa0/24
  no shutdown
 exit
 
-interface range fa0/20 - 22
+interface range fa0/22 - 24
  shutdown
 exit
 
@@ -199,6 +206,14 @@ exit
 ip routing
 
 interface fa0/1
+ description SRV-DHCP
+ switchport mode access
+ switchport access vlan 40
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface fa0/2
  description TRK-TO-SW-CENTRAL
  switchport trunk encapsulation dot1q
  switchport mode trunk
@@ -207,20 +222,12 @@ interface fa0/1
  no shutdown
 exit
 
-interface fa0/2
+interface fa0/3
  description TRK-TO-SW-REMOTE
  switchport trunk encapsulation dot1q
  switchport mode trunk
  switchport trunk allowed vlan 10,20,30,40
  switchport trunk native vlan 999
- no shutdown
-exit
-
-interface fa0/3
- description SRV-DHCP
- switchport mode access
- switchport access vlan 40
- spanning-tree portfast
  no shutdown
 exit
 
@@ -267,32 +274,7 @@ vlan 999
  name MGMT_NATIVE
 exit
 
-interface range fa0/1 - 5
- description REMOTE-WORKSTATIONS
- switchport mode access
- switchport access vlan 20
- spanning-tree portfast
- no shutdown
-exit
-
-interface fa0/10
- description AP-TRUNK
- switchport trunk encapsulation dot1q
- switchport mode trunk
- switchport trunk allowed vlan 10,20,30
- switchport trunk native vlan 999
- no shutdown
-exit
-
-interface fa0/23
- description CAM-REMOTE
- switchport mode access
- switchport access vlan 30
- spanning-tree portfast
- no shutdown
-exit
-
-interface fa0/24
+interface fa0/1
  description TRK-TO-SW-CORE
  switchport trunk encapsulation dot1q
  switchport mode trunk
@@ -301,14 +283,40 @@ interface fa0/24
  no shutdown
 exit
 
-interface range fa0/6 - 9
- description SPARE
+interface range fa0/2 - 5
+ description REMOTE-WORKSTATIONS
  switchport mode access
  switchport access vlan 20
- shutdown
+ spanning-tree portfast
+ no shutdown
 exit
 
-interface range fa0/11 - 22
+interface fa0/6
+ description CAM-REMOTE
+ switchport mode access
+ switchport access vlan 30
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface fa0/7
+ description AP-TRUNK
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30
+ switchport trunk native vlan 999
+ no shutdown
+exit
+
+interface fa0/8
+ description REMOTE-PRINTER
+ switchport mode access
+ switchport access vlan 20
+ spanning-tree portfast
+ no shutdown
+exit
+
+interface range fa0/9 - 24
  description SPARE
  shutdown
 exit
@@ -321,33 +329,22 @@ end
 write memory
 ```
 
-## 7. Настройка точки доступа Wi-Fi (Access Point PT)
-1. Открыть устройство → вкладка `GUI` → раздел `Wireless`.
-2. Задать:
-   - `SSID`: `REMOTE_WIFI`
-   - `Authentication`: `WPA2-PSK`
-   - `Pass Phrase`: `Remote123!`
-   - `VLAN`: `10`
-3. Вкладка `Config`:
-   - `Port 1` перевести в режим `Trunk`.
-   - Убедиться, что native VLAN совпадает с 999 (если интерфейс позволяет указать).
-   - При необходимости назначить IP для управления (например 192.168.9.10/24).
 
 ## 8. Настройка DHCP на сервере
 1. Во вкладке `Desktop` задать статический IP:
    - `IP Address`: `10.40.0.1`
    - `Subnet Mask`: `255.255.255.0`
    - `Default Gateway`: `10.40.0.254`
-   - `DNS Server`: `8.8.8.8` (опционально)
+   - `DNS Server`: `0.0.0.0`
 2. Перейти `Services → DHCP`, включить `DHCP`.
 3. Создать пулы:
 
 | Pool Name | Default Gateway | DNS Server | Start IP | Subnet Mask | Maximum Users |
 | --- | --- | --- | --- | --- | --- |
-| VLAN10 | 10.10.0.1 | 8.8.8.8 | 10.10.0.10 | 255.255.255.0 | 200 |
-| VLAN20 | 10.20.0.1 | 8.8.8.8 | 10.20.0.10 | 255.255.255.0 | 200 |
-| VLAN30 | 10.30.0.1 | 8.8.8.8 | 10.30.0.10 | 255.255.255.0 | 100 |
-| VLAN40 (опц.) | 10.40.0.254 | 8.8.8.8 | 10.40.0.20 | 255.255.255.0 | 50 |
+| VLAN10 | 10.10.0.1 | 0.0.0.0 | 10.10.0.10 | 255.255.255.0 | 240 |
+| VLAN20 | 10.20.0.1 | 0.0.0.0 | 10.20.0.10 | 255.255.255.0 | 240 |
+| VLAN30 | 10.30.0.1 | 0.0.0.0 | 10.30.0.10 | 255.255.255.0 | 240 |
+| VLAN40 | 10.40.0.1 | 0.0.0.0 | 10.40.0.10 | 255.255.255.0 | 240 |
 
 4. Сохранить настройки кнопкой `Save`.
 
@@ -402,9 +399,9 @@ write memory
 #### VLAN
 | VLAN | Имя | Назначение | Подсеть | Шлюз | DHCP-диапазон |
 | --- | --- | --- | --- | --- | --- |
-| 10 | USERS | ПК центрального офиса, Wi-Fi | 10.10.0.0/24 | 10.10.0.1 | 10.10.0.10–10.10.0.210 |
-| 20 | REMOTE | ПК/принтеры доп. офиса | 10.20.0.0/24 | 10.20.0.1 | 10.20.0.10–10.20.0.210 |
-| 30 | CAMERAS | IP-камеры | 10.30.0.0/24 | 10.30.0.1 | 10.30.0.10–10.30.0.110 |
+| 10 | USERS | ПК центрального офиса, Wi-Fi | 10.10.0.0/24 | 10.10.0.1 | 10.10.0.10–10.10.0.250 |
+| 20 | REMOTE | ПК/принтеры доп. офиса | 10.20.0.0/24 | 10.20.0.1 | 10.20.0.10–10.20.0.250 |
+| 30 | CAMERAS | IP-камеры | 10.30.0.0/24 | 10.30.0.1 | 10.30.0.10–10.30.0.150 |
 | 40 | SERVER | Серверы | 10.40.0.0/24 | 10.40.0.254 | статические |
 | 999 | MGMT | Native VLAN | 192.168.9.0/24 | — | — |
 
@@ -420,19 +417,25 @@ write memory
 #### Соединения
 | Откуда | Порт | Куда | Порт | Тип кабеля |
 | --- | --- | --- | --- | --- |
-| SW-CENTRAL | Fa0/24 | SW-CORE | Fa0/1 | Copper (trunk) |
-| SW-REMOTE | Fa0/24 | SW-CORE | Fa0/2 | Fiber через Repeaters |
-| SW-CORE | Fa0/3 | DHCP-SRV | Fa0/0 | Copper |
-| SW-CENTRAL | Fa0/23 | CAM-CENTRAL | Fa0 | Copper |
-| SW-REMOTE | Fa0/23 | CAM-REMOTE | Fa0 | Copper |
+| SW-CENTRAL | Fa0/21 | SW-CORE | Fa0/2 | Copper |
+| SW-REMOTE | Fa0/1 | SW-CORE | Fa0/3 | Fiber через Repeaters |
+| SW-CORE | Fa0/1 | DHCP-SRV | Fa0 | Copper |
+| SW-CENTRAL | Fa0/20 | CAM-CENTRAL | Fa0 | Copper |
+| SW-REMOTE | Fa0/6 | CAM-REMOTE | Fa0 | Copper |
+| SW-REMOTE | Fa0/7 | AP-REMOTE | Port0 | Copper |
+| SW-CENTRAL | Fa0/19 | Printer0 | — | Copper |
+| SW-REMOTE | Fa0/8 | Printer1 | — | Copper |
 
 #### Порты (пример)
 | Коммутатор | Порт | Описание | VLAN |
 | --- | --- | --- | --- |
 | SW-CENTRAL | Fa0/1 | Рабочее место 1 | 10 |
 | SW-CENTRAL | Fa0/19 | Принтер | 10 |
-| SW-CORE | Fa0/3 | DHCP-сервер | 40 |
-| SW-REMOTE | Fa0/10 | Точка доступа | trunk (10,20,30) |
+| SW-CENTRAL | Fa0/21 | Связь с SW-CORE | trunk (10,30,40) |
+| SW-CORE | Fa0/1 | DHCP-сервер | 40 |
+| SW-CORE | Fa0/3 | Связь с SW-REMOTE | trunk (10,20,30,40) |
+| SW-REMOTE | Fa0/2 | Рабочее место 1 | 20 |
+| SW-REMOTE | Fa0/7 | Точка доступа | trunk (10,20,30) |
 
 ## 11. Подготовка приложений для отчёта
 - **Файл модели**: сохранить `lab4.pkt` в папку проекта.
